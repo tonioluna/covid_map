@@ -57,11 +57,24 @@ def main():
     for url, color in _layers:
         print("getting %s"%(url,))
         json = requests.post(url).json()
-        data.append(json)
+        print("parsing data...")
+        l = []
+        for point in json:
+            try:
+                m = _re_float_num.search(point["longitude"])
+                assert m != None, "Invalid longitude: %s"%(repr(point["longitude"]))
+                long = float(m.group())
+                m = _re_float_num.search(point["latitude"])
+                assert m != None, "Invalid latitude: %s"%(repr(point["latitude"]))
+                lat = float(m.group())
+            except Exception as ex:
+                print(repr(ex))
+                continue
+            l.append(dict(latitude = lat, longitude = long))
+        data.append(l)
         colors.append(color)
     
     for map in maps.maps:
-        print(repr(map),)
         print("Generating %s"%(map.id,))
         print("Reading %s"%(map.image,))
         
@@ -74,22 +87,16 @@ def main():
         
         ruh_m = plt.imread(map.image)
         
+        print("Adding points...")
+        
         for set, color in zip(data, colors):
             for point in set:
-                #print(point)
-                try:
-                    m = _re_float_num.search(point["longitude"])
-                    assert m != None, "Invalid longitude: %s"%(point["longitude"])
-                    long = float(m.group())
-                    m = _re_float_num.search(point["latitude"])
-                    assert m != None, "Invalid latitude: %s"%(point["latitude"])
-                    lat = float(m.group())
-                except Exception as ex:
-                    print(repr(ex))
-                    continue
+                long = point["longitude"]
+                lat = point["latitude"]
+                #print("Checking %s, %s"%(lat, long,))
                 if long < map.coord_w or long > map.coord_e or lat < map.coord_s or lat > map.coord_n: 
                     continue
-                #print("Adding %s, %s"%(long, lat))
+                #print("Adding %s, %s"%(lat, long,))
                 ax.scatter(long, lat, zorder=1, alpha= 0.4, c=color, s=3)
                 
         #ax.set_title(map.id)
@@ -98,6 +105,7 @@ def main():
         
         plt.imshow(ruh_m, zorder=0, extent = (map.coord_w, map.coord_e, map.coord_s, map.coord_n), aspect= 'equal')
         filename = map.id + ".png"
+        print("Saving %s"%(filename,))
         plt.savefig(fname = filename, dpi=800, aspect = "equal", bbox_inches='tight', pad_inches=0)
         plt.close()
         
