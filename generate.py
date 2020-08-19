@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import collections
 import requests
 import re
+import time
+import traceback
 
 _my_path = os.path.realpath(os.path.dirname(__file__))
 
@@ -23,6 +25,10 @@ _maps_cfg_file = os.path.join(_my_path, "maps", "maps.ini")
 _Map = collections.namedtuple("Map", ("image", "coord_n", "coord_e", "coord_s", "coord_w", "id"))
 
 _re_float_num = re.compile("(\-)?[0-9]+\.[0-9]+")
+_re_int_num = re.compile("(\-)?[0-9]+")
+
+_lat_digits = 2
+_long_digits = 3
 
 class Maps:
     def __init__(self, cfg_file):
@@ -49,6 +55,25 @@ class Maps:
             map = _Map(*v)
             self.maps.append(map)
 
+def _get_coord(point, coord, digits):
+    m = _re_float_num.search(point[coord])
+    if m == None:
+        mi = _re_int_num.search(point[coord])
+        if mi != None:
+            n = int(mi.group())
+            sign = -1 if n <= 0 else 1
+            n = abs(n)
+            n = "%i"%n
+            n = n[0:digits] + "." + n[digits:]
+            n = float(n) * sign
+            print("Warning: %s converted, %s -> %s"%(coord, point[coord], n))
+        else:
+            assert m != None, "Invalid %s: %s"%(coord, repr(point[coord]))
+    else:
+        n = float(m.group())
+    
+    return n
+
 def main():
     maps = Maps(_maps_cfg_file)
     
@@ -61,18 +86,24 @@ def main():
         l = []
         for point in json:
             try:
-                m = _re_float_num.search(point["longitude"])
-                assert m != None, "Invalid longitude: %s"%(repr(point["longitude"]))
-                long = float(m.group())
-                m = _re_float_num.search(point["latitude"])
-                assert m != None, "Invalid latitude: %s"%(repr(point["latitude"]))
-                lat = float(m.group())
+                long = _get_coord(point, "longitude", _long_digits)
+                lat = _get_coord(point, "latitude", _lat_digits)
             except Exception as ex:
                 print(repr(ex))
+                #print(traceback.format_exc())
                 continue
             l.append(dict(latitude = lat, longitude = long))
         data.append(l)
         colors.append(color)
+    
+    # output directory
+    index = 1
+    while True:
+        dir = time.strftime("%y%m%d") + ("" if index == 1 else ".%i"%index)
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+            break
+        index += 1
     
     for map in maps.maps:
         print("Generating %s"%(map.id,))
@@ -104,7 +135,7 @@ def main():
         ax.set_ylim(map.coord_s, map.coord_n)
         
         plt.imshow(ruh_m, zorder=0, extent = (map.coord_w, map.coord_e, map.coord_s, map.coord_n), aspect= 'equal')
-        filename = map.id + ".png"
+        filename = os.path.join(dir, map.id + ".png")
         print("Saving %s"%(filename,))
         plt.savefig(fname = filename, dpi=800, aspect = "equal", bbox_inches='tight', pad_inches=0)
         plt.close()
